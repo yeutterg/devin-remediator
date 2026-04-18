@@ -25,6 +25,7 @@ export interface SessionRecord {
   acusConsumed?: number;
   structuredOutput?: Record<string, unknown>;
   archivedAfterPr?: boolean;
+  completionCommentPosted?: boolean;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
