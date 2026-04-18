@@ -6,10 +6,13 @@ Event-driven remediation orchestrator. Turns GitHub issues (from scanners, seede
 
 1. **scan** — runs `pip-audit` / `npm audit` / `actionlint` / `bandit` against a target checkout; normalizes findings through Zod schemas.
 2. **file-issues** — creates GitHub issues for new findings (idempotent via fingerprint). Also ingests a curated YAML seed file for non-scanner classes (theming, a11y, TS migration, tests).
-3. **dispatch** — for each issue labeled `devin-auto-remediate` without an active session: creates a Devin session via the v3 API, attaches a class-specific playbook, tags the session, requires a structured output schema.
-4. **reconcile** — polls open Devin sessions, checks CI on resulting PRs, auto-messages blocked sessions with useful context, writes status comments back to the issues.
-5. **report** — regenerates `STATUS.md` with funnel, throughput, quality, and cost metrics plus a per-session table.
+3. **dispatch** — for each issue labeled `devin-auto-remediate` without an active session: creates a Devin session via the v3 API, attaches a class-specific playbook by `playbook_id`, tags the session, requires a structured output schema. Dispatch is **round-robin by class** so STATUS.md shows class diversity early.
+4. **reconcile** — polls open Devin sessions, checks CI on resulting PRs, auto-messages blocked sessions with useful context, writes status comments back to the issues, and **DELETEs (archives) sessions once their PR's CI is green** so the concurrent-session slot is released.
+5. **report** — regenerates `STATUS.md` with funnel, throughput, quality, and **ACU cost** metrics plus a per-session table.
 6. **run** — scan → file-issues → dispatch → reconcile → report, in one execution.
+7. **doctor** — one-shot preflight: verifies GitHub access, enables issues on the fork, creates the class labels, and probes whether `create_as_user_id` works. Results are cached in `state.json.preflight` so dispatch doesn't re-probe on every tick.
+8. **playbooks:register** — uploads each `src/playbooks/*.md` to Devin as an org-level playbook and caches the returned `playbook_id` in `state.json.playbooks[]`. On the next dispatch, sessions are created with `playbook_id` instead of ~2KB of inlined markdown per prompt.
+9. **webhook** — minimal Express-less receiver on `:8787/webhook`. Verifies a shared secret, parses session events, and stamps `state.json` so the next reconcile tick picks up the update without polling.
 
 ## Why Devin
 
@@ -29,13 +32,21 @@ This orchestrator is intentionally thin (~300 LOC of glue). Devin is the agent; 
 npm install
 npm run build
 export GITHUB_TOKEN=ghp_...
-export DEVIN_API_KEY=cog_...
-export DEVIN_ORG_ID=...
-export DEVIN_USER_ID=...        # your Devin user id for create_as_user_id
+export DEVIN_API_KEY=cog_...                   # must start with cog_ / dsk_ / dev_
+export DEVIN_ORG_ID=org-xxxxxxxxxxxxxxxx       # prefixed UUID from the Devin UI URL
+export DEVIN_USER_ID='email|xxxxxxxxxxxx'      # prefixed user id, not the display name
 export TARGET_REPO=yeutterg/superset
 export REMEDIATOR_REPO=yeutterg/devin-remediator
-npx remediator run
+
+# one-time setup
+npx remediator doctor                          # preflight: labels, issues, impersonation probe
+npx remediator playbooks:register              # register playbooks → cache playbook_id in state.json
+
+# steady state
+npx remediator run                             # scan → file-issues → dispatch → reconcile → report
 ```
+
+Config load fails fast if `DEVIN_ORG_ID` / `DEVIN_USER_ID` / `DEVIN_API_KEY` don't match their expected prefixes — previously these were accepted as display names and only surfaced as a 404 on the first API call.
 
 ## Event sources
 
@@ -75,10 +86,13 @@ src/
   commands/
     scan.ts
     fileIssues.ts
-    dispatch.ts
-    reconcile.ts
-    report.ts
+    dispatch.ts          # round-robin by class; uses playbook_id when registered
+    reconcile.ts         # auto-archives after CI-green; captures acus_consumed
+    report.ts            # ACU cost + sessions table
     run.ts
+    doctor.ts            # preflight checks + cache
+    playbooks.ts         # register/update org playbooks
+    webhook.ts           # minimal receiver stub
   playbooks/
     security.md
     ci.md

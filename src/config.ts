@@ -2,9 +2,26 @@ import { z } from "zod";
 
 const ConfigSchema = z.object({
   githubToken: z.string().min(1, "GITHUB_TOKEN required"),
-  devinApiKey: z.string().min(1).optional(),
-  devinOrgId: z.string().min(1).optional(),
-  devinUserId: z.string().optional(),
+  devinApiKey: z
+    .string()
+    .min(1)
+    .regex(/^(cog_|dsk_|dev_)/, "DEVIN_API_KEY must be a service-user key (cog_*, dsk_*, dev_*)")
+    .optional(),
+  devinOrgId: z
+    .string()
+    .min(1)
+    .regex(
+      /^org-[0-9a-f]{16,}$/,
+      "DEVIN_ORG_ID must be the prefixed UUID like 'org-abc123…' — copy it from the Devin UI URL, not the org display name",
+    )
+    .optional(),
+  devinUserId: z
+    .string()
+    .regex(
+      /^(user-|email\|)/,
+      "DEVIN_USER_ID must be a prefixed ID like 'user-…' or 'email|…' — not the display name",
+    )
+    .optional(),
   devinApiBase: z.string().default("https://api.devin.ai/v3"),
   targetRepo: z.string().regex(/^[^/]+\/[^/]+$/, "expected owner/repo"),
   remediatorRepo: z.string().regex(/^[^/]+\/[^/]+$/, "expected owner/repo"),

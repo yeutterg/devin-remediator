@@ -22,10 +22,27 @@ export interface SessionRecord {
   prUrl?: string;
   ciPassedFirstTry?: boolean;
   iterations: number;
+  acusConsumed?: number;
   structuredOutput?: Record<string, unknown>;
+  archivedAfterPr?: boolean;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
+}
+
+export interface PlaybookRef {
+  className: FindingClass;
+  playbookId: string;
+  title: string;
+  updatedAt: string;
+}
+
+export interface PreflightCache {
+  checkedAt: string;
+  impersonationAllowed?: boolean;
+  targetIssuesEnabled?: boolean;
+  labelsPresent?: string[];
+  serviceUserEmail?: string;
 }
 
 export interface RunRecord {
@@ -43,9 +60,17 @@ export interface DbShape {
   issues: IssueRecord[];
   sessions: SessionRecord[];
   runs: RunRecord[];
+  playbooks?: PlaybookRef[];
+  preflight?: PreflightCache;
 }
 
-const defaults: DbShape = { findings: [], issues: [], sessions: [], runs: [] };
+const defaults: DbShape = {
+  findings: [],
+  issues: [],
+  sessions: [],
+  runs: [],
+  playbooks: [],
+};
 
 export async function openState(path: string) {
   return JSONFilePreset<DbShape>(path, defaults);
