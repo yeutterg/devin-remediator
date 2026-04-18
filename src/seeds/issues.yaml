@@ -1,0 +1,228 @@
+# Curated seed of 30 candidate remediation targets.
+# Scanner-driven classes (vuln:dep, vuln:ci, vuln:static) can also be discovered dynamically;
+# this file is the source of truth for classes without scanners (theming, a11y, perf, ts-migrate, tests)
+# and for pinning the exact scoped issues we want in the demo set.
+#
+# Each entry becomes a GitHub issue in the target repo, labeled `devin-auto-remediate` plus the class.
+# Fingerprint is sha256(title) truncated — `file-issues` uses it for idempotency.
+
+issues:
+  # ───── vuln:dep (dependency bumps) ─────
+  - class: vuln:dep
+    title: "Bump jinja2 past GHSA-q2x7-8rv6-6q7h (XSS via filename)"
+    severity: high
+    body: |
+      Upgrade `jinja2` in `requirements/base.txt` and any constraints/lock files to a version that clears
+      **GHSA-q2x7-8rv6-6q7h**. Verify with `pip-audit` and run `pytest -q tests/unit_tests/` on affected modules.
+
+  - class: vuln:dep
+    title: "Bump urllib3 past GHSA-34jh-p97f-mpxf"
+    severity: high
+    body: |
+      Upgrade `urllib3` (transitive) past **GHSA-34jh-p97f-mpxf**. May require updating a direct dependency.
+      Re-run `pip-audit` to confirm clean.
+
+  - class: vuln:dep
+    title: "Bump path-to-regexp in superset-frontend past GHSA-9wv6-86v2-598j"
+    severity: high
+    body: |
+      In `superset-frontend/`, resolve **path-to-regexp** to a version clearing **GHSA-9wv6-86v2-598j**.
+      Update yarn.lock; run `npm audit` to confirm clean; run affected jest suites.
+
+  - class: vuln:dep
+    title: "Bump flask-cors past GHSA-84pr-m4jr-85g5"
+    severity: medium
+    body: |
+      Upgrade `flask-cors` past **GHSA-84pr-m4jr-85g5**. Verify CORS behavior unchanged by running
+      `pytest tests/integration_tests/security_tests.py`.
+
+  - class: vuln:dep
+    title: "Bump cookie past GHSA-pxg6-pf52-xh8x"
+    severity: low
+    body: |
+      In `superset-frontend/`, resolve `cookie` past **GHSA-pxg6-pf52-xh8x**.
+
+  - class: vuln:dep
+    title: "Bump send past GHSA-m6fv-jmcg-4jfg"
+    severity: low
+    body: |
+      In `superset-frontend/`, resolve `send` past **GHSA-m6fv-jmcg-4jfg**.
+
+  - class: vuln:dep
+    title: "Remove lodash.* subpaths pinned <4.17.21 (prototype pollution class)"
+    severity: medium
+    body: |
+      Find any `lodash.pick`, `lodash.get`, `lodash.merge` usages or pins below 4.17.21 and upgrade.
+      Prefer consolidating to the single `lodash` package to keep bundle size stable.
+
+  - class: vuln:dep
+    title: "Replace deprecated `request` package in dev scripts with node:fetch"
+    severity: medium
+    body: |
+      The `request` package is deprecated and unmaintained. Replace any remaining usages in dev/CI scripts
+      with built-in `fetch` (Node 18+) or `undici`. Keep behavior identical.
+
+  # ───── vuln:ci (CI / supply chain) ─────
+  - class: vuln:ci
+    title: "Extract unsafe ${{ github.event.* }} expressions to env vars in workflows"
+    severity: high
+    body: |
+      Same class as the tj-actions/changed-files supply-chain attack. For each workflow using
+      `${{ github.event.pull_request.title }}` (or similar user-controllable expressions) directly in
+      `run:` blocks, move them into `env:` and reference as `"$VAR"`. See apache/superset#38893 for prior art.
+
+  - class: vuln:ci
+    title: "Pin the five most-used GitHub Actions to commit SHAs"
+    severity: medium
+    body: |
+      Pin `actions/checkout`, `actions/setup-node`, `actions/setup-python`, `actions/cache`, and
+      `actions/upload-artifact` to full commit SHAs with the current version as a comment. Supply-chain hardening.
+
+  - class: vuln:ci
+    title: "Add default `permissions: contents: read` to workflows missing it"
+    severity: medium
+    body: |
+      Workflows without explicit `permissions:` inherit overly broad defaults. Add
+      `permissions: contents: read` at the workflow level, then scope up per-job as needed.
+
+  - class: vuln:ci
+    title: "Audit `pull_request_target` usage and migrate safe cases to `pull_request`"
+    severity: high
+    body: |
+      `pull_request_target` runs with secrets and write tokens against PR code — high risk.
+      Identify each usage; migrate any that don't need write scope to `pull_request`.
+
+  # ───── vuln:static (Bandit etc.) ─────
+  - class: vuln:static
+    title: "Replace shell=True in a dev/CI script with argv list (Bandit B602)"
+    severity: medium
+    body: |
+      Bandit B602 — find a `subprocess.run(..., shell=True)` in `scripts/` and rewrite as argv list.
+      Verify the script still passes its smoke test.
+
+  - class: vuln:static
+    title: "Remove hardcoded /tmp paths in dev tooling (Bandit B108)"
+    severity: low
+    body: |
+      Replace hardcoded `/tmp/...` paths in dev tooling with `tempfile.mkdtemp()` or `tempfile.NamedTemporaryFile`.
+
+  - class: vuln:static
+    title: "Justify or replace bare subprocess imports (Bandit B404)"
+    severity: low
+    body: |
+      Bandit B404 — for each flagged `import subprocess`, either add a `# nosec` comment with justification
+      or refactor to a safer call pattern.
+
+  # ───── fe:theme (frontend theming) ─────
+  - class: fe:theme
+    title: "Add a VS Code Default Dark+ theme variant"
+    severity: low
+    body: |
+      Add a selectable theme that mirrors VS Code's "Default Dark+" palette:
+      - `editor.background` → #1E1E1E
+      - `editor.foreground` → #D4D4D4
+      - `activityBar.background` → #333333
+      - `sideBar.background` → #252526
+      - `editorLineNumber.foreground` → #858585
+      - Accent → #007ACC
+      Wire it through the existing theme provider and design tokens. Add a Storybook story and update
+      Settings → Appearance to include the new option.
+
+  - class: fe:theme
+    title: "Add a VS Code Default Light+ theme variant"
+    severity: low
+    body: |
+      Counterpart of the Dark+ variant. Palette: editor.background #FFFFFF, editor.foreground #000000,
+      activityBar.background #2C2C2C, accent #0066B8. Same wiring path.
+
+  - class: fe:theme
+    title: "Replace hardcoded hex colors in chart components with design tokens"
+    severity: low
+    body: |
+      Pick three chart components with hardcoded colors (grep `#[0-9a-fA-F]{6}` under `superset-frontend/plugins/`)
+      and route them through the theme's design tokens so dark-mode variants render correctly.
+
+  # ───── fe:a11y (accessibility) ─────
+  - class: fe:a11y
+    title: "Add aria-label to icon-only buttons in the dashboard toolbar"
+    severity: medium
+    body: |
+      Each icon-only `<Button>` in the dashboard top toolbar needs an `aria-label`. Run axe-core against
+      `/superset/dashboard/1/` after the change to confirm no regressions.
+
+  - class: fe:a11y
+    title: "Fix WCAG AA color-contrast failures on secondary text (light mode)"
+    severity: medium
+    body: |
+      axe-core flags several `--secondary-text` uses at 3.8:1 contrast. Bump the token to meet AA (>=4.5:1).
+      Update Storybook snapshots.
+
+  - class: fe:a11y
+    title: "Make the chart-type selector dropdown keyboard-navigable"
+    severity: medium
+    body: |
+      Arrow keys should move focus through options; Enter should select; Escape should close. Add Jest tests.
+
+  - class: fe:a11y
+    title: "Restore visible focus rings on primary CTA buttons"
+    severity: low
+    body: |
+      Some primary buttons have `outline: none` in global styles. Restore focus rings using a visible
+      `:focus-visible` treatment that matches the theme.
+
+  # ───── fe:perf ─────
+  - class: fe:perf
+    title: "Replace residual moment.js imports with date-fns"
+    severity: low
+    body: |
+      Eliminate remaining `moment` imports from `superset-frontend/src/`. Use `date-fns` idioms.
+      Keep date/time output identical (snapshot tests cover most cases).
+
+  - class: fe:perf
+    title: "Lazy-load the syntax-highlighter bundle used by SQL Lab"
+    severity: low
+    body: |
+      Split `react-syntax-highlighter` out of the initial bundle via a dynamic `import()`.
+      Confirm Lighthouse Performance +3 or better.
+
+  - class: fe:perf
+    title: "Memoize expensive Redux selector in Dashboard slice"
+    severity: low
+    body: |
+      Profile with React DevTools and convert one expensive selector in `superset-frontend/src/dashboard/`
+      to a `reselect` memoized selector. Include before/after profile screenshots.
+
+  # ───── ts:migrate ─────
+  - class: ts:migrate
+    title: "Convert ListView/utils.jsx to TSX with precise types"
+    severity: low
+    body: |
+      Convert `superset-frontend/src/components/ListView/utils.jsx` to TSX. Remove any `any` types.
+
+  - class: ts:migrate
+    title: "Eliminate `any` in superset-frontend/src/explore/controlUtils/"
+    severity: low
+    body: |
+      Replace `any` with precise types throughout the directory. Don't weaken the public API.
+
+  - class: ts:migrate
+    title: "Enable noImplicitAny in a leaf package and fix errors"
+    severity: low
+    body: |
+      Pick one leaf package under `superset-frontend/packages/`. Enable `noImplicitAny` in its tsconfig.
+      Fix the resulting errors without introducing `any` casts.
+
+  # ───── tests ─────
+  - class: tests
+    title: "Backfill Jest tests for a utility module at 0% coverage"
+    severity: low
+    body: |
+      Pick a utility under `superset-frontend/src/utils/` with 0% coverage and add meaningful tests
+      (happy path + at least two edge cases). Do not modify the module's behavior.
+
+  - class: tests
+    title: "Stabilize a named flaky test in CI"
+    severity: low
+    body: |
+      Identify a flaky test from recent CI runs. Fix root cause if possible; otherwise quarantine with
+      `.skip` and open a follow-up note. Include before/after runs.
