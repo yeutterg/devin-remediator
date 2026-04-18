@@ -1,16 +1,16 @@
 # devin-remediator — STATUS
 
-_Regenerated: 2026-04-18T17:01:38.862Z_
+_Regenerated: 2026-04-18T17:08:31.104Z_
 
 ## How to tell this is working
 
-We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked off **21** Devin sessions. **10** PRs have been opened; **9** sessions are complete. Median time from session start to PR is **14m** and **1/10** PRs passed CI on the first try. Backlog: **9** unaddressed issues.
+We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked off **21** Devin sessions. **10** PRs have been opened; **10** sessions are complete. Median time from session start to PR is **14m** and **2/10** PRs passed CI on the first try. Backlog: **9** unaddressed issues.
 
 ## Live counts
 
 | Runs | Findings | Issues | Active | Completed | Stopped | PRs opened |
 |---|---|---|---|---|---|---|
-| 0 | 30 | 30 | 4 | 9 | 8 | 10 |
+| 0 | 30 | 30 | 3 | 10 | 8 | 10 |
 
 ## Funnel by class
 
@@ -28,7 +28,7 @@ We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked o
 ## Quality
 
 - Median time-to-PR: **14m**
-- CI pass on first try: **1/10**
+- CI pass on first try: **2/10**
 - Average iterations per session: **0.38**
 
 ## Cost (ACUs)
@@ -52,7 +52,7 @@ We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked o
 | `vuln:static` | [#13](https://github.com/yeutterg/superset/issues/13) | [77162a64](https://app.devin.ai/sessions/d47436d879dc4381a515ce4177162a64) | `stopped` | — | — | — |
 | `vuln:ci` | [#12](https://github.com/yeutterg/superset/issues/12) | [7baa0ce0](https://app.devin.ai/sessions/5e594e7685c7455193a1889e7baa0ce0) | `stopped` | — | — | — |
 | `vuln:ci` | [#11](https://github.com/yeutterg/superset/issues/11) | [8f2a4f50](https://app.devin.ai/sessions/990a35fc70cd417e80309dd28f2a4f50) | `stopped` | — | — | — |
-| `vuln:ci` | [#10](https://github.com/yeutterg/superset/issues/10) | [4db17eb3](https://app.devin.ai/sessions/e86f14ba2e034aea8ee8ec2d4db17eb3) | `running` | [PR](https://github.com/yeutterg/superset/pull/40) | 0.00 | high |
+| `vuln:ci` | [#10](https://github.com/yeutterg/superset/issues/10) | [4db17eb3](https://app.devin.ai/sessions/e86f14ba2e034aea8ee8ec2d4db17eb3) | `completed` | [PR](https://github.com/yeutterg/superset/pull/40) | 0.00 | high |
 | `vuln:ci` | [#9](https://github.com/yeutterg/superset/issues/9) | [0d903f99](https://app.devin.ai/sessions/bec6383e09cf40de9c4937020d903f99) | `completed` | [PR](https://github.com/yeutterg/superset/pull/35) | 0.00 | high |
 | `vuln:dep` | [#8](https://github.com/yeutterg/superset/issues/8) | [95b700c0](https://app.devin.ai/sessions/1b05b81e7e234993b1823b3b95b700c0) | `completed` | [PR](https://github.com/yeutterg/superset/pull/38) | — | medium |
 | `vuln:dep` | [#7](https://github.com/yeutterg/superset/issues/7) | [ef113d39](https://app.devin.ai/sessions/e08301e029ac43cbb344f115ef113d39) | `completed` | [PR](https://github.com/yeutterg/superset/pull/37) | — | medium |
