@@ -100,6 +100,8 @@ export async function runDispatch(config: Config, db: StateDb): Promise<void> {
       createAsUserId: config.devinUserId,
       structuredOutputSchema: STRUCTURED_SCHEMA,
       title: `Remediate #${issue.issueNumber}: ${issue.class}`,
+      repos: [config.targetRepo],
+      maxAcuLimit: config.maxAcuPerSession,
     });
 
     const rec: SessionRecord = {

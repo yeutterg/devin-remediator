@@ -35,6 +35,8 @@ export type CreateSessionArgs = {
   createAsUserId?: string;
   structuredOutputSchema?: Record<string, unknown>;
   title?: string;
+  repos?: string[];
+  maxAcuLimit?: number;
 };
 
 export class DevinClient {
@@ -59,6 +61,8 @@ export class DevinClient {
     if (args.createAsUserId) body.create_as_user_id = args.createAsUserId;
     if (args.structuredOutputSchema) body.structured_output_schema = args.structuredOutputSchema;
     if (args.title) body.title = args.title;
+    if (args.repos?.length) body.repos = args.repos;
+    if (typeof args.maxAcuLimit === "number") body.max_acu_limit = args.maxAcuLimit;
     const res = await fetch(`${this.base}/organizations/${this.orgId}/sessions`, {
       method: "POST",
       headers: this.headers(),

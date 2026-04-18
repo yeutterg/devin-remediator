@@ -11,6 +11,7 @@ const ConfigSchema = z.object({
   targetCheckout: z.string().default("/home/ubuntu/repos/superset"),
   stateFile: z.string().default("./state.json"),
   maxActiveSessions: z.coerce.number().default(5),
+  maxAcuPerSession: z.coerce.number().default(8),
   autoRemediateLabel: z.string().default("devin-auto-remediate"),
   dryRun: z.coerce.boolean().default(false),
 });
@@ -29,6 +30,7 @@ export function loadConfig(): Config {
     targetCheckout: process.env.TARGET_CHECKOUT,
     stateFile: process.env.REMEDIATOR_STATE,
     maxActiveSessions: process.env.MAX_ACTIVE_SESSIONS,
+    maxAcuPerSession: process.env.MAX_ACU_PER_SESSION,
     autoRemediateLabel: process.env.AUTO_REMEDIATE_LABEL,
     dryRun: process.env.DRY_RUN,
   });
