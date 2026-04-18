@@ -48,6 +48,13 @@ export async function runReport(config: Config, db: StateDb, outPath = "STATUS.m
     .filter((x): x is number => typeof x === "number");
   const medianTimeToPrMs = median(timesToPr);
   const ciPassFirstTry = withPr.filter((s) => s.ciPassedFirstTry === true).length;
+  const acuValues = sessions
+    .map((s) => s.acusConsumed)
+    .filter((x): x is number => typeof x === "number" && x > 0);
+  const totalAcus = acuValues.reduce((a, b) => a + b, 0);
+  const medianAcuPerMergedPr = median(
+    sessions.filter((s) => !!s.prUrl && typeof s.acusConsumed === "number").map((s) => s.acusConsumed!),
+  );
 
   const rowsByClass = ALL_CLASSES.map((cls) => {
     const f = findings.filter((x) => x.class === cls).length;
@@ -102,21 +109,32 @@ export async function runReport(config: Config, db: StateDb, outPath = "STATUS.m
     }**`,
   );
   lines.push("");
+  lines.push("## Cost (ACUs)");
+  lines.push("");
+  lines.push(`- Total ACUs consumed: **${totalAcus.toFixed(2)}**`);
+  lines.push(
+    `- Median ACUs per PR opened: **${
+      medianAcuPerMergedPr > 0 ? medianAcuPerMergedPr.toFixed(2) : "—"
+    }**`,
+  );
+  lines.push(`- Sessions reporting ACUs: **${acuValues.length}/${sessions.length || 1}**`);
+  lines.push("");
   lines.push("## Sessions");
   lines.push("");
   if (sessions.length === 0) {
     lines.push("_No sessions yet._");
   } else {
-    lines.push(`| Class | Issue | Session | Status | PR | Confidence |`);
-    lines.push(`|---|---|---|---|---|---|`);
+    lines.push(`| Class | Issue | Session | Status | PR | ACUs | Confidence |`);
+    lines.push(`|---|---|---|---|---|---:|---|`);
     const sorted = [...sessions].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     for (const s of sorted) {
       const issue = issues.find((i) => i.fingerprint === s.fingerprint);
       const issueLink = issue ? `[#${issue.issueNumber}](${issue.url})` : `#${s.issueNumber}`;
       const confidence = (s.structuredOutput?.["confidence"] as string | undefined) ?? "—";
       const pr = s.prUrl ? `[PR](${s.prUrl})` : "—";
+      const acus = typeof s.acusConsumed === "number" ? s.acusConsumed.toFixed(2) : "—";
       lines.push(
-        `| \`${s.class}\` | ${issueLink} | [${s.devinSessionId.slice(-8)}](${s.devinSessionUrl}) | \`${s.status}\` | ${pr} | ${confidence} |`,
+        `| \`${s.class}\` | ${issueLink} | [${s.devinSessionId.slice(-8)}](${s.devinSessionUrl}) | \`${s.status}\` | ${pr} | ${acus} | ${confidence} |`,
       );
     }
   }
