@@ -94,15 +94,42 @@ export async function runDispatch(config: Config, db: StateDb): Promise<void> {
       continue;
     }
 
-    const { sessionId, url } = await devin.createSession({
-      prompt,
-      tags: ["vuln-remediation", issue.class, `issue-${issue.issueNumber}`],
-      createAsUserId: config.devinUserId,
-      structuredOutputSchema: STRUCTURED_SCHEMA,
-      title: `Remediate #${issue.issueNumber}: ${issue.class}`,
-      repos: [config.targetRepo],
-      maxAcuLimit: config.maxAcuPerSession,
-    });
+    let sessionId: string;
+    let url: string;
+    try {
+      const res = await devin.createSession({
+        prompt,
+        tags: ["vuln-remediation", issue.class, `issue-${issue.issueNumber}`],
+        createAsUserId: config.devinUserId,
+        structuredOutputSchema: STRUCTURED_SCHEMA,
+        title: `Remediate #${issue.issueNumber}: ${issue.class}`,
+        repos: [config.targetRepo],
+        maxAcuLimit: config.maxAcuPerSession,
+      });
+      sessionId = res.sessionId;
+      url = res.url;
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (msg.includes("429")) {
+        console.log(pc.yellow(`dispatch: hit concurrent session limit; pausing`));
+        break;
+      }
+      if (msg.includes("403") && config.devinUserId) {
+        console.log(pc.yellow(`dispatch: impersonation denied; retrying without create_as_user_id`));
+        const res = await devin.createSession({
+          prompt,
+          tags: ["vuln-remediation", issue.class, `issue-${issue.issueNumber}`],
+          structuredOutputSchema: STRUCTURED_SCHEMA,
+          title: `Remediate #${issue.issueNumber}: ${issue.class}`,
+          repos: [config.targetRepo],
+          maxAcuLimit: config.maxAcuPerSession,
+        });
+        sessionId = res.sessionId;
+        url = res.url;
+      } else {
+        throw err;
+      }
+    }
 
     const rec: SessionRecord = {
       fingerprint: issue.fingerprint,
