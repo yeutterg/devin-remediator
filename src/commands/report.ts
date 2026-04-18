@@ -1,0 +1,133 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import pc from "picocolors";
+import type { Config } from "../config.js";
+import type { FindingClass } from "../scanners/normalize.js";
+import type { StateDb } from "../state.js";
+
+const ALL_CLASSES: FindingClass[] = [
+  "vuln:dep",
+  "vuln:ci",
+  "vuln:static",
+  "fe:theme",
+  "fe:a11y",
+  "fe:perf",
+  "ts:migrate",
+  "tests",
+];
+
+function count<T>(xs: T[], pred: (x: T) => boolean): number {
+  return xs.reduce((n, x) => (pred(x) ? n + 1 : n), 0);
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`;
+  return `${(ms / 3_600_000).toFixed(1)}h`;
+}
+
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? ((sorted[mid - 1]! + sorted[mid]!) / 2) : sorted[mid]!;
+}
+
+export async function runReport(config: Config, db: StateDb, outPath = "STATUS.md"): Promise<void> {
+  const now = new Date();
+  const sessions = db.data.sessions;
+  const issues = db.data.issues;
+  const findings = db.data.findings;
+
+  const active = count(sessions, (s) => ["running", "blocked", "pending"].includes(s.status));
+  const completed = count(sessions, (s) => s.status === "completed");
+  const stopped = count(sessions, (s) => s.status === "stopped" || s.status === "failed");
+  const withPr = sessions.filter((s) => !!s.prUrl);
+  const timesToPr = withPr
+    .map((s) => (s.completedAt ? +new Date(s.completedAt) - +new Date(s.createdAt) : undefined))
+    .filter((x): x is number => typeof x === "number");
+  const medianTimeToPrMs = median(timesToPr);
+  const ciPassFirstTry = withPr.filter((s) => s.ciPassedFirstTry === true).length;
+
+  const rowsByClass = ALL_CLASSES.map((cls) => {
+    const f = findings.filter((x) => x.class === cls).length;
+    const i = issues.filter((x) => x.class === cls).length;
+    const s = sessions.filter((x) => x.class === cls);
+    const p = s.filter((x) => !!x.prUrl).length;
+    return { cls, f, i, s: s.length, p };
+  });
+
+  const lines: string[] = [];
+  lines.push(`# devin-remediator — STATUS`);
+  lines.push("");
+  lines.push(`_Regenerated: ${now.toISOString()}_`);
+  lines.push("");
+  lines.push("## If I were a VP of Engineering, how would I know this is working?");
+  lines.push("");
+  lines.push(
+    `We surfaced **${findings.length}** remediation targets, filed **${issues.length}** GitHub issues, and kicked off **${sessions.length}** Devin sessions. `
+    + `**${withPr.length}** PRs have been opened; **${completed}** sessions are complete. `
+    + `Median time from session start to PR is **${formatDuration(medianTimeToPrMs)}** `
+    + `and **${ciPassFirstTry}/${withPr.length || 1}** PRs passed CI on the first try. `
+    + `Backlog: **${issues.length - sessions.length}** unaddressed issues.`,
+  );
+  lines.push("");
+  lines.push("## Live counts");
+  lines.push("");
+  lines.push(
+    `| Runs | Findings | Issues | Active | Completed | Stopped | PRs opened |`,
+  );
+  lines.push(`|---|---|---|---|---|---|---|`);
+  lines.push(
+    `| ${db.data.runs.length} | ${findings.length} | ${issues.length} | ${active} | ${completed} | ${stopped} | ${withPr.length} |`,
+  );
+  lines.push("");
+  lines.push("## Funnel by class");
+  lines.push("");
+  lines.push(`| Class | Findings | Issues | Sessions | PRs |`);
+  lines.push(`|---|---:|---:|---:|---:|`);
+  for (const r of rowsByClass) {
+    lines.push(`| \`${r.cls}\` | ${r.f} | ${r.i} | ${r.s} | ${r.p} |`);
+  }
+  lines.push("");
+  lines.push("## Quality");
+  lines.push("");
+  lines.push(`- Median time-to-PR: **${formatDuration(medianTimeToPrMs)}**`);
+  lines.push(`- CI pass on first try: **${ciPassFirstTry}/${withPr.length || 1}**`);
+  lines.push(
+    `- Average iterations per session: **${
+      sessions.length === 0
+        ? "0"
+        : (sessions.reduce((n, s) => n + s.iterations, 0) / sessions.length).toFixed(2)
+    }**`,
+  );
+  lines.push("");
+  lines.push("## Sessions");
+  lines.push("");
+  if (sessions.length === 0) {
+    lines.push("_No sessions yet._");
+  } else {
+    lines.push(`| Class | Issue | Session | Status | PR | Confidence |`);
+    lines.push(`|---|---|---|---|---|---|`);
+    const sorted = [...sessions].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    for (const s of sorted) {
+      const issue = issues.find((i) => i.fingerprint === s.fingerprint);
+      const issueLink = issue ? `[#${issue.issueNumber}](${issue.url})` : `#${s.issueNumber}`;
+      const confidence = (s.structuredOutput?.["confidence"] as string | undefined) ?? "—";
+      const pr = s.prUrl ? `[PR](${s.prUrl})` : "—";
+      lines.push(
+        `| \`${s.class}\` | ${issueLink} | [${s.devinSessionId.slice(-8)}](${s.devinSessionUrl}) | \`${s.status}\` | ${pr} | ${confidence} |`,
+      );
+    }
+  }
+  lines.push("");
+  lines.push("---");
+  lines.push("");
+  lines.push(
+    `Generated by \`devin-remediator\`. See the source at https://github.com/${config.remediatorRepo}.`,
+  );
+
+  const resolved = path.resolve(outPath);
+  await fs.writeFile(resolved, lines.join("\n") + "\n");
+  console.log(pc.green(`report: wrote ${resolved}`));
+}
