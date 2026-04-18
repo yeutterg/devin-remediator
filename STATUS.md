@@ -1,25 +1,25 @@
 # devin-remediator — STATUS
 
-_Regenerated: 2026-04-18T16:39:04.170Z_
+_Regenerated: 2026-04-18T16:42:07.840Z_
 
 ## How to tell this is working
 
-We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked off **10** Devin sessions. **9** PRs have been opened; **8** sessions are complete. Median time from session start to PR is **14m** and **0/9** PRs passed CI on the first try. Backlog: **20** unaddressed issues.
+We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked off **18** Devin sessions. **10** PRs have been opened; **8** sessions are complete. Median time from session start to PR is **14m** and **0/10** PRs passed CI on the first try. Backlog: **12** unaddressed issues.
 
 ## Live counts
 
 | Runs | Findings | Issues | Active | Completed | Stopped | PRs opened |
 |---|---|---|---|---|---|---|
-| 0 | 30 | 30 | 2 | 8 | 0 | 9 |
+| 0 | 30 | 30 | 2 | 8 | 8 | 10 |
 
 ## Funnel by class
 
 | Class | Findings | Issues | Sessions | PRs |
 |---|---:|---:|---:|---:|
 | `vuln:dep` | 8 | 8 | 8 | 8 |
-| `vuln:ci` | 4 | 4 | 2 | 1 |
-| `vuln:static` | 3 | 3 | 0 | 0 |
-| `fe:theme` | 3 | 3 | 0 | 0 |
+| `vuln:ci` | 4 | 4 | 4 | 2 |
+| `vuln:static` | 3 | 3 | 3 | 0 |
+| `fe:theme` | 3 | 3 | 3 | 0 |
 | `fe:a11y` | 4 | 4 | 0 | 0 |
 | `fe:perf` | 3 | 3 | 0 | 0 |
 | `ts:migrate` | 3 | 3 | 0 | 0 |
@@ -28,14 +28,22 @@ We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked o
 ## Quality
 
 - Median time-to-PR: **14m**
-- CI pass on first try: **0/9**
-- Average iterations per session: **0.80**
+- CI pass on first try: **0/10**
+- Average iterations per session: **0.44**
 
 ## Sessions
 
 | Class | Issue | Session | Status | PR | Confidence |
 |---|---|---|---|---|---|
-| `vuln:ci` | [#10](https://github.com/yeutterg/superset/issues/10) | [4db17eb3](https://app.devin.ai/sessions/e86f14ba2e034aea8ee8ec2d4db17eb3) | `running` | — | — |
+| `fe:theme` | [#18](https://github.com/yeutterg/superset/issues/18) | [90dae73f](https://app.devin.ai/sessions/79c204e84caf41d9b35571fc90dae73f) | `stopped` | — | — |
+| `fe:theme` | [#17](https://github.com/yeutterg/superset/issues/17) | [93707435](https://app.devin.ai/sessions/a20786c0d2674fb3bc873e4c93707435) | `stopped` | — | — |
+| `fe:theme` | [#16](https://github.com/yeutterg/superset/issues/16) | [a34d9536](https://app.devin.ai/sessions/24c4d228c27c42cf8a8ea802a34d9536) | `stopped` | — | — |
+| `vuln:static` | [#15](https://github.com/yeutterg/superset/issues/15) | [f7d2c813](https://app.devin.ai/sessions/29980e7620034a28be0d5092f7d2c813) | `stopped` | — | — |
+| `vuln:static` | [#14](https://github.com/yeutterg/superset/issues/14) | [f7e08dcd](https://app.devin.ai/sessions/f47c6f29f5f34d23b2cc508cf7e08dcd) | `stopped` | — | — |
+| `vuln:static` | [#13](https://github.com/yeutterg/superset/issues/13) | [77162a64](https://app.devin.ai/sessions/d47436d879dc4381a515ce4177162a64) | `stopped` | — | — |
+| `vuln:ci` | [#12](https://github.com/yeutterg/superset/issues/12) | [7baa0ce0](https://app.devin.ai/sessions/5e594e7685c7455193a1889e7baa0ce0) | `stopped` | — | — |
+| `vuln:ci` | [#11](https://github.com/yeutterg/superset/issues/11) | [8f2a4f50](https://app.devin.ai/sessions/990a35fc70cd417e80309dd28f2a4f50) | `stopped` | — | — |
+| `vuln:ci` | [#10](https://github.com/yeutterg/superset/issues/10) | [4db17eb3](https://app.devin.ai/sessions/e86f14ba2e034aea8ee8ec2d4db17eb3) | `running` | [PR](https://github.com/yeutterg/superset/pull/40) | high |
 | `vuln:ci` | [#9](https://github.com/yeutterg/superset/issues/9) | [0d903f99](https://app.devin.ai/sessions/bec6383e09cf40de9c4937020d903f99) | `running` | [PR](https://github.com/yeutterg/superset/pull/35) | high |
 | `vuln:dep` | [#8](https://github.com/yeutterg/superset/issues/8) | [95b700c0](https://app.devin.ai/sessions/1b05b81e7e234993b1823b3b95b700c0) | `completed` | [PR](https://github.com/yeutterg/superset/pull/38) | medium |
 | `vuln:dep` | [#7](https://github.com/yeutterg/superset/issues/7) | [ef113d39](https://app.devin.ai/sessions/e08301e029ac43cbb344f115ef113d39) | `completed` | [PR](https://github.com/yeutterg/superset/pull/37) | medium |
