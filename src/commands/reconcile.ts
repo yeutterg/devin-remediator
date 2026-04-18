@@ -38,9 +38,15 @@ async function checkCiStatus(
       ref: pr.data.head.sha,
     });
     if (checks.total_count === 0) return "pending";
-    const anyFail = checks.check_runs.some((c) => c.conclusion === "failure" || c.conclusion === "timed_out");
+    // Treat cancelled/action_required/stale as failure so we don't prematurely archive and
+    // mis-report ciPassedFirstTry. Only success/neutral/skipped should count as "done ok".
+    const FAIL_CONCLUSIONS = new Set(["failure", "timed_out", "cancelled", "action_required", "stale"]);
+    const OK_CONCLUSIONS = new Set(["success", "neutral", "skipped"]);
+    const anyFail = checks.check_runs.some((c) => c.conclusion !== null && FAIL_CONCLUSIONS.has(c.conclusion));
     if (anyFail) return "failure";
-    const allDone = checks.check_runs.every((c) => c.status === "completed");
+    const allDone = checks.check_runs.every(
+      (c) => c.status === "completed" && c.conclusion !== null && OK_CONCLUSIONS.has(c.conclusion),
+    );
     if (allDone) return "success";
     return "pending";
   } catch {
@@ -122,16 +128,33 @@ export async function runReconcile(config: Config, db: StateDb): Promise<void> {
       }
     }
 
-    if (nextStatus === "blocked" && s.iterations < 1) {
-      await devin.sendMessage(
-        s.devinSessionId,
-        "You appear to be blocked. If you need environment credentials, check `.env.example` for mock values and continue. Otherwise emit structured output with `confidence: low` and a description of the blocker.",
-      );
-      s.iterations += 1;
-      s.updatedAt = new Date().toISOString();
+    // Skip the blocked-nudge if this iteration just auto-archived the session (status was flipped
+    // to "completed" above but nextStatus is still "blocked" from the pre-archive API snapshot) —
+    // sendMessage on an archived session returns an error and would otherwise crash the whole
+    // reconcile batch. Also wrap in try/catch defensively so one transient API error can't drop
+    // state for every subsequent session in the loop.
+    if (nextStatus === "blocked" && s.iterations < 1 && !s.archivedAfterPr && s.status !== "completed") {
+      try {
+        await devin.sendMessage(
+          s.devinSessionId,
+          "You appear to be blocked. If you need environment credentials, check `.env.example` for mock values and continue. Otherwise emit structured output with `confidence: low` and a description of the blocker.",
+        );
+        s.iterations += 1;
+        s.updatedAt = new Date().toISOString();
+      } catch (err) {
+        console.warn(pc.yellow(`  blocked-nudge failed for ${s.devinSessionId}: ${(err as Error).message}`));
+      }
     }
 
-    if (becameCompleted && s.prUrl) {
+    // Post the completion comment either when the session reached "completed" on its own, OR
+    // when we just auto-archived it after CI-green (in which case `becameCompleted` is still
+    // false because nextStatus was "running"/"blocked" on the pre-archive snapshot).
+    const shouldCommentCompletion =
+      s.prUrl
+      && s.status === "completed"
+      && !s.completionCommentPosted
+      && (becameCompleted || s.archivedAfterPr);
+    if (shouldCommentCompletion) {
       try {
         await octokit.issues.createComment({
           ...repo,
@@ -146,6 +169,7 @@ export async function runReconcile(config: Config, db: StateDb): Promise<void> {
             .filter(Boolean)
             .join("\n"),
         });
+        s.completionCommentPosted = true;
       } catch (err) {
         console.warn(pc.yellow(`  issue comment failed: ${(err as Error).message}`));
       }
