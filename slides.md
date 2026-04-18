@@ -1,6 +1,6 @@
 # Event-Driven Remediation with Devin
 
-5-slide deck. Each `---` is a slide break.
+6-slide deck. Each `---` is a slide break.
 
 ---
 
@@ -32,7 +32,40 @@ scan → file-issues → dispatch → reconcile → report
 
 ---
 
-## 3 / How it works
+## 3 / Architecture
+
+**Discovery → GitHub issue → Devin session → PR → CI-feedback → status — all driven by the Devin v3 REST API.**
+
+```mermaid
+flowchart LR
+  subgraph Discovery
+    S1[pip-audit]
+    S2[npm audit]
+    S3[actionlint]
+    S4[bandit]
+    S5[seed YAML<br/>30 tickets]
+  end
+
+  Discovery --> N[Zod normalizer<br/>Finding schema]
+  N --> I[GitHub issues<br/>+ auto-remediate label]
+  I --> D{{dispatch<br/>POST /sessions}}
+  D --> Devin[Devin session<br/>playbook + repos<br/>+ max_acu + schema]
+  Devin --> PR[PR on fork<br/>Fixes #N]
+  PR --> CI[GitHub CI]
+  CI -->|fail| R{{reconcile<br/>POST /messages}}
+  R -->|self-correct| Devin
+  CI -->|pass| A{{DELETE ?archive=true<br/>free concurrent slot}}
+  Devin -->|structured_output| State[(state.json<br/>lowdb)]
+  State --> Rep[STATUS.md<br/>funnel · throughput<br/>CI pass % · ACU per fix]
+```
+
+- **Thin orchestrator.** `~400 LOC` of glue. The only moving parts are a CLI and a JSON file.
+- **Devin is the agent.** Every remediation step that requires judgement runs inside a Devin session, not in the orchestrator.
+- **Observability is a side-effect.** Session state, structured output, and PR + CI status are all written to `state.json`; `STATUS.md` is just a regeneration of it.
+
+---
+
+## 4 / How it works
 
 **Devin v3 REST API is the core primitive. The orchestrator is the bus.**
 
@@ -44,7 +77,7 @@ scan → file-issues → dispatch → reconcile → report
 
 ---
 
-## 4 / Results
+## 5 / Results
 
 **9 PRs opened by Devin, covering real Superset CVEs and workflow hardening.**
 
@@ -60,11 +93,11 @@ scan → file-issues → dispatch → reconcile → report
 | #38 | `vuln:dep` | ban deprecated `request` package |
 | #39 | `vuln:dep` | pin `jinja2>=3.1.5` for GHSA-q2x7-8rv6-6q7h |
 
-Live: `STATUS.md` on [`yeutterg/devin-remediator`](https://github.com/yeutterg/devin-remediator/blob/scaffold/STATUS.md) · PRs on [`yeutterg/superset`](https://github.com/yeutterg/superset/pulls).
+Live: `STATUS.md` on [`yeutterg/devin-remediator`](https://github.com/yeutterg/devin-remediator/blob/main/STATUS.md) · PRs on [`yeutterg/superset`](https://github.com/yeutterg/superset/pulls).
 
 ---
 
-## 5 / Why Devin, and what's next
+## 6 / Why Devin, and what's next
 
 **Why Devin is the only primitive that makes this work**
 
