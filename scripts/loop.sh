@@ -9,7 +9,7 @@ set -euo pipefail
 : "${GITHUB_TOKEN:?GITHUB_TOKEN required}"
 
 INTERVAL="${INTERVAL:-120}"
-BRANCH="${BRANCH:-scaffold}"
+BRANCH="${BRANCH:-main}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
