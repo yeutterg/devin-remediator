@@ -2,8 +2,6 @@
 
 Event-driven remediation orchestrator. Turns GitHub issues (from scanners, seeded tickets, or humans adding a label) into autonomous Devin sessions that ship merge-ready PRs.
 
-Built as a 2–3h take-home challenge. Pitched for a VP of Engineering audience.
-
 ## What it does
 
 1. **scan** — runs `pip-audit` / `npm audit` / `actionlint` / `bandit` against a target checkout; normalizes findings through Zod schemas.
@@ -47,7 +45,7 @@ npx remediator run
 
 ## Observability
 
-`STATUS.md` is regenerated on every `report` run. It answers *"if I were a VP of Engineering, how would I know this is working?"* with:
+`STATUS.md` is regenerated on every `report` run. It tracks end-to-end effectiveness with:
 
 - Funnel (findings → issues → sessions → PRs → merged) by class.
 - Throughput (sessions completed per hour).

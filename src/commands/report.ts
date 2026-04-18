@@ -62,7 +62,7 @@ export async function runReport(config: Config, db: StateDb, outPath = "STATUS.m
   lines.push("");
   lines.push(`_Regenerated: ${now.toISOString()}_`);
   lines.push("");
-  lines.push("## If I were a VP of Engineering, how would I know this is working?");
+  lines.push("## How to tell this is working");
   lines.push("");
   lines.push(
     `We surfaced **${findings.length}** remediation targets, filed **${issues.length}** GitHub issues, and kicked off **${sessions.length}** Devin sessions. `

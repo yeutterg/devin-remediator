@@ -1,8 +1,8 @@
 # devin-remediator — STATUS
 
-_Regenerated: 2026-04-18T16:29:53.466Z_
+_Regenerated: 2026-04-18T16:30:01.635Z_
 
-## If I were a VP of Engineering, how would I know this is working?
+## How to tell this is working
 
 We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked off **9** Devin sessions. **1** PRs have been opened; **0** sessions are complete. Median time from session start to PR is **0s** and **0/1** PRs passed CI on the first try. Backlog: **21** unaddressed issues.
 
