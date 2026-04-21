@@ -49,16 +49,17 @@ function matchSession(
 /** Commit + push STATUS.md if it changed. Fires a detached git invocation so a slow push
  *  doesn't block the HTTP response to Devin. */
 function pushStatusAsync(rootDir: string, branch: string): void {
-  // NB: if/then/fi can't be joined with `&&` (bash syntax error on `then &&`); use `;` +
-  // inline `&&` between the actual commands so a failing commit still doesn't push stale state.
+  // Multi-line bash script: join with `\n` so each array element is its own line (space-join
+  // merged `cd` and `if` into one command; && join broke on `then &&`). Inner `&&` chains the
+  // three git commands so a failed add/commit doesn't push stale state.
   const sh = [
-    `cd ${rootDir}`,
+    `cd "${rootDir}"`,
     `if ! git diff --quiet STATUS.md 2>/dev/null; then`,
     `  git add STATUS.md &&`,
     `  git -c user.name='devin-remediator[bot]' -c user.email='devin-remediator@local' commit -m "status: webhook $(date -u +%FT%TZ)" >/dev/null 2>&1 &&`,
-    `  git push origin ${branch} >/dev/null 2>&1 || true;`,
+    `  git push origin "${branch}" >/dev/null 2>&1 || true`,
     `fi`,
-  ].join(" ");
+  ].join("\n");
   const child = spawn("bash", ["-c", sh], { stdio: "ignore", detached: true });
   child.unref();
 }
@@ -77,6 +78,23 @@ export async function runWebhook(
     : undefined;
   const octokit = makeOctokit(config.githubToken);
   const repo = parseRepo(config.targetRepo);
+
+  // Per-session serialization: two webhook events for the same session (e.g. status_changed +
+  // completed in quick succession) would otherwise race on `session.completionCommentPosted`,
+  // `session.archivedAfterPr`, etc., producing duplicate GitHub comments + duplicate sendMessage
+  // calls. Chain each session's work onto a per-session promise so different sessions still
+  // process in parallel but same-session events run in order.
+  const sessionQueues = new Map<string, Promise<void>>();
+  function serialize(key: string, fn: () => Promise<void>): Promise<void> {
+    const prev = sessionQueues.get(key) ?? Promise.resolve();
+    const next = prev.catch(() => {}).then(fn);
+    sessionQueues.set(key, next);
+    // Clean up when the queue drains so the Map doesn't grow unboundedly.
+    void next.finally(() => {
+      if (sessionQueues.get(key) === next) sessionQueues.delete(key);
+    });
+    return next;
+  }
 
   const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && (req.url === "/health" || req.url === "/")) {
@@ -120,33 +138,37 @@ export async function runWebhook(
       console.warn(pc.yellow(`  no local session for ${payload.session_id}; ignoring`));
       return;
     }
-    const session = db.data.sessions.find((s) => s.devinSessionId === match.devinSessionId);
-    if (!session) return;
 
-    // Optimistic in-memory update from the payload so STATUS.md reflects the event even if the
-    // Devin GET slow-paths below or fails.
-    if (payload.pr_url) session.prUrl = payload.pr_url;
-    if (typeof payload.acus_consumed === "number") session.acusConsumed = payload.acus_consumed;
-    session.updatedAt = new Date().toISOString();
+    void serialize(match.devinSessionId, async () => {
+      // Re-lookup the session under the lock so we see mutations from the previous chained task.
+      const session = db.data.sessions.find((s) => s.devinSessionId === match.devinSessionId);
+      if (!session) return;
 
-    // Authoritative update: refetch from Devin + run the per-session reconcile pipeline
-    // (CI check, auto-archive, completion comment, blocked-nudge).
-    if (devin) {
-      try {
-        await reconcileOneSession(session, { devin, octokit, repo });
-      } catch (err) {
-        console.warn(pc.yellow(`  reconcileOneSession failed: ${(err as Error).message}`));
+      // Optimistic in-memory update from the payload so STATUS.md reflects the event even if
+      // the Devin GET slow-paths below or fails.
+      if (payload.pr_url) session.prUrl = payload.pr_url;
+      if (typeof payload.acus_consumed === "number") session.acusConsumed = payload.acus_consumed;
+      session.updatedAt = new Date().toISOString();
+
+      // Authoritative update: refetch from Devin + run the per-session reconcile pipeline
+      // (CI check, auto-archive, completion comment, blocked-nudge).
+      if (devin) {
+        try {
+          await reconcileOneSession(session, { devin, octokit, repo });
+        } catch (err) {
+          console.warn(pc.yellow(`  reconcileOneSession failed: ${(err as Error).message}`));
+        }
       }
-    }
-    await db.write();
+      await db.write();
 
-    try {
-      await runReport(config, db, reportOut);
-    } catch (err) {
-      console.warn(pc.yellow(`  runReport failed: ${(err as Error).message}`));
-    }
+      try {
+        await runReport(config, db, reportOut);
+      } catch (err) {
+        console.warn(pc.yellow(`  runReport failed: ${(err as Error).message}`));
+      }
 
-    if (pushBranch) pushStatusAsync(process.cwd(), pushBranch);
+      if (pushBranch) pushStatusAsync(process.cwd(), pushBranch);
+    });
   });
 
   await new Promise<void>((resolve) => server.listen(opts.port, resolve));
