@@ -46,9 +46,10 @@ function matchSession(
   );
 }
 
-/** Commit + push STATUS.md if it changed. Fires a detached git invocation so a slow push
- *  doesn't block the HTTP response to Devin. */
-function pushStatusAsync(rootDir: string, branch: string): void {
+/** Awaitable git add/commit/push of STATUS.md. Resolves whether or not there was anything to
+ *  push; errors are swallowed (the next event / loop tick will retry). Callers serialize via
+ *  the pushQueue to avoid `.git/index.lock` races between concurrent webhook events. */
+function pushStatus(rootDir: string, branch: string): Promise<void> {
   // Multi-line bash script: join with `\n` so each array element is its own line (space-join
   // merged `cd` and `if` into one command; && join broke on `then &&`). Inner `&&` chains the
   // three git commands so a failed add/commit doesn't push stale state.
@@ -60,8 +61,11 @@ function pushStatusAsync(rootDir: string, branch: string): void {
     `  git push origin "${branch}" >/dev/null 2>&1 || true`,
     `fi`,
   ].join("\n");
-  const child = spawn("bash", ["-c", sh], { stdio: "ignore", detached: true });
-  child.unref();
+  return new Promise<void>((resolve) => {
+    const child = spawn("bash", ["-c", sh], { stdio: "ignore" });
+    child.once("close", () => resolve());
+    child.once("error", () => resolve());
+  });
 }
 
 export async function runWebhook(
@@ -94,6 +98,17 @@ export async function runWebhook(
       if (sessionQueues.get(key) === next) sessionQueues.delete(key);
     });
     return next;
+  }
+
+  // Global push queue: different sessions still process in parallel, but their STATUS.md git
+  // pushes serialize through this chain so they don't race on `.git/index.lock`. (The polling
+  // loop running concurrently is a separate process — its own git push can still collide, but
+  // `|| true` absorbs the failure and the next tick/event re-pushes.)
+  let pushChain: Promise<void> = Promise.resolve();
+  function queuePush(): Promise<void> {
+    if (!pushBranch) return Promise.resolve();
+    pushChain = pushChain.catch(() => {}).then(() => pushStatus(process.cwd(), pushBranch));
+    return pushChain;
   }
 
   const server = http.createServer(async (req, res) => {
@@ -140,7 +155,16 @@ export async function runWebhook(
     }
 
     void serialize(match.devinSessionId, async () => {
-      // Re-lookup the session under the lock so we see mutations from the previous chained task.
+      // Re-read state.json under the lock so mutations from the polling-loop process (dispatch
+      // adding new sessions, reconcile updating existing ones) aren't clobbered by our write.
+      // openState wraps lowdb; db.read() repopulates db.data from disk.
+      try {
+        await db.read();
+      } catch (err) {
+        console.warn(pc.yellow(`  db.read failed: ${(err as Error).message}`));
+      }
+
+      // Re-lookup after re-read (the object identity may have changed).
       const session = db.data.sessions.find((s) => s.devinSessionId === match.devinSessionId);
       if (!session) return;
 
@@ -167,7 +191,9 @@ export async function runWebhook(
         console.warn(pc.yellow(`  runReport failed: ${(err as Error).message}`));
       }
 
-      if (pushBranch) pushStatusAsync(process.cwd(), pushBranch);
+      // Serialized through pushChain so concurrent cross-session events don't race on
+      // `.git/index.lock`.
+      await queuePush();
     });
   });
 
