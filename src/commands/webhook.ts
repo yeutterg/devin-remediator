@@ -49,14 +49,16 @@ function matchSession(
 /** Commit + push STATUS.md if it changed. Fires a detached git invocation so a slow push
  *  doesn't block the HTTP response to Devin. */
 function pushStatusAsync(rootDir: string, branch: string): void {
+  // NB: if/then/fi can't be joined with `&&` (bash syntax error on `then &&`); use `;` +
+  // inline `&&` between the actual commands so a failing commit still doesn't push stale state.
   const sh = [
     `cd ${rootDir}`,
     `if ! git diff --quiet STATUS.md 2>/dev/null; then`,
-    `  git add STATUS.md`,
-    `  git -c user.name='devin-remediator[bot]' -c user.email='devin-remediator@local' commit -m "status: webhook $(date -u +%FT%TZ)" >/dev/null 2>&1`,
-    `  git push origin ${branch} >/dev/null 2>&1 || true`,
+    `  git add STATUS.md &&`,
+    `  git -c user.name='devin-remediator[bot]' -c user.email='devin-remediator@local' commit -m "status: webhook $(date -u +%FT%TZ)" >/dev/null 2>&1 &&`,
+    `  git push origin ${branch} >/dev/null 2>&1 || true;`,
     `fi`,
-  ].join(" && ");
+  ].join(" ");
   const child = spawn("bash", ["-c", sh], { stdio: "ignore", detached: true });
   child.unref();
 }

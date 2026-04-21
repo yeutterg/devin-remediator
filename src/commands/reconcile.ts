@@ -193,7 +193,7 @@ export async function reconcileOneSession(
     s.prUrl
     && s.status === "completed"
     && !s.completionCommentPosted
-    && (becameCompleted || archived);
+    && (becameCompleted || s.archivedAfterPr);
   if (shouldCommentCompletion) {
     try {
       await octokit.issues.createComment({
