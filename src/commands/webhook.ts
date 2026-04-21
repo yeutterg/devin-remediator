@@ -83,32 +83,17 @@ export async function runWebhook(
   const octokit = makeOctokit(config.githubToken);
   const repo = parseRepo(config.targetRepo);
 
-  // Per-session serialization: two webhook events for the same session (e.g. status_changed +
-  // completed in quick succession) would otherwise race on `session.completionCommentPosted`,
-  // `session.archivedAfterPr`, etc., producing duplicate GitHub comments + duplicate sendMessage
-  // calls. Chain each session's work onto a per-session promise so different sessions still
-  // process in parallel but same-session events run in order.
-  const sessionQueues = new Map<string, Promise<void>>();
-  function serialize(key: string, fn: () => Promise<void>): Promise<void> {
-    const prev = sessionQueues.get(key) ?? Promise.resolve();
-    const next = prev.catch(() => {}).then(fn);
-    sessionQueues.set(key, next);
-    // Clean up when the queue drains so the Map doesn't grow unboundedly.
-    void next.finally(() => {
-      if (sessionQueues.get(key) === next) sessionQueues.delete(key);
-    });
-    return next;
-  }
-
-  // Global push queue: different sessions still process in parallel, but their STATUS.md git
-  // pushes serialize through this chain so they don't race on `.git/index.lock`. (The polling
-  // loop running concurrently is a separate process — its own git push can still collide, but
-  // `|| true` absorbs the failure and the next tick/event re-pushes.)
-  let pushChain: Promise<void> = Promise.resolve();
-  function queuePush(): Promise<void> {
-    if (!pushBranch) return Promise.resolve();
-    pushChain = pushChain.catch(() => {}).then(() => pushStatus(process.cwd(), pushBranch));
-    return pushChain;
+  // Global serialization of the entire read → mutate → write → report → push cycle. We tried
+  // per-session queues earlier but that still lets different-session events interleave, and
+  // `db.read()` replaces `db.data` wholesale (lowdb behavior) — so an in-flight callback holding
+  // a reference to `session` from the previous db.data would silently have its mutations
+  // dropped when the next event called db.read() and then db.write(). A single chain is the
+  // cheapest way to make the whole cycle atomic. STATUS.md git pushes ride the same chain so
+  // they can't race on `.git/index.lock`.
+  let chain: Promise<void> = Promise.resolve();
+  function serialize(fn: () => Promise<void>): Promise<void> {
+    chain = chain.catch(() => {}).then(fn);
+    return chain;
   }
 
   const server = http.createServer(async (req, res) => {
@@ -148,23 +133,21 @@ export async function runWebhook(
       ),
     );
 
-    const match = matchSession(db.data.sessions, payload.session_id);
-    if (!match) {
-      console.warn(pc.yellow(`  no local session for ${payload.session_id}; ignoring`));
-      return;
-    }
-
-    void serialize(match.devinSessionId, async () => {
-      // Re-read state.json under the lock so mutations from the polling-loop process (dispatch
-      // adding new sessions, reconcile updating existing ones) aren't clobbered by our write.
-      // openState wraps lowdb; db.read() repopulates db.data from disk.
+    void serialize(async () => {
+      // Re-read state.json inside the lock so we pick up any mutations made by the polling-loop
+      // process (different Node process) between events.
       try {
         await db.read();
       } catch (err) {
         console.warn(pc.yellow(`  db.read failed: ${(err as Error).message}`));
       }
 
-      // Re-lookup after re-read (the object identity may have changed).
+      // Re-lookup after re-read (db.data is replaced wholesale by lowdb on .read()).
+      const match = matchSession(db.data.sessions, payload.session_id);
+      if (!match) {
+        console.warn(pc.yellow(`  no local session for ${payload.session_id}; ignoring`));
+        return;
+      }
       const session = db.data.sessions.find((s) => s.devinSessionId === match.devinSessionId);
       if (!session) return;
 
@@ -175,7 +158,7 @@ export async function runWebhook(
       session.updatedAt = new Date().toISOString();
 
       // Authoritative update: refetch from Devin + run the per-session reconcile pipeline
-      // (CI check, auto-archive, completion comment, blocked-nudge).
+      // (CI check, auto-archive, completion comment, blocked-nudge, issue auto-close).
       if (devin) {
         try {
           await reconcileOneSession(session, { devin, octokit, repo });
@@ -191,9 +174,7 @@ export async function runWebhook(
         console.warn(pc.yellow(`  runReport failed: ${(err as Error).message}`));
       }
 
-      // Serialized through pushChain so concurrent cross-session events don't race on
-      // `.git/index.lock`.
-      await queuePush();
+      if (pushBranch) await pushStatus(process.cwd(), pushBranch);
     });
   });
 

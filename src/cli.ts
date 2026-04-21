@@ -14,6 +14,7 @@ import { runDoctor } from "./commands/doctor.js";
 import { runRegisterPlaybooks } from "./commands/playbooks.js";
 import { runWebhook } from "./commands/webhook.js";
 import { runIngest } from "./commands/ingest.js";
+import { runCloseIssues } from "./commands/closeIssues.js";
 import type { FindingClass } from "./scanners/normalize.js";
 
 const VALID_CLASSES: readonly FindingClass[] = [
@@ -102,6 +103,17 @@ async function main(): Promise<void> {
         ...(opts.secret ? { secret: opts.secret } : {}),
         ...(opts.pushBranch ? { pushBranch: opts.pushBranch } : {}),
       });
+    });
+
+  program
+    .command("close-issues")
+    .description(
+      "Close every GitHub issue whose session already has a PR URL in state.json. Idempotent; used once to backfill issues opened before auto-close shipped.",
+    )
+    .action(async () => {
+      const config = loadConfig();
+      const db = await openState(config.stateFile);
+      await runCloseIssues(config, db);
     });
 
   program

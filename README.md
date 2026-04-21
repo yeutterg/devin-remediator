@@ -83,6 +83,19 @@ Two paths, designed to coexist:
 - **Polling loop (pull)** — always-on fallback. Default interval 60s; runs `dispatch → reconcile → report` per tick.
   ```bash
   BRANCH=main INTERVAL=60 bash scripts/loop.sh
+
+  # Live-demo pacing: one session at a time (a new one only starts after the previous
+  # session's PR ships and the concurrent slot is released). Useful for Loom recordings.
+  LOOP_DEMO=1 BRANCH=main INTERVAL=60 bash scripts/loop.sh
+  ```
+
+## Issue lifecycle
+
+- When a Devin session **opens a PR** for an issue, the reconciler immediately **closes the issue** with a comment linking the PR. This keeps the `Open` issue list as the live work-queue.
+- The PR itself is **never auto-merged** — a human reviewer is the trust gate. GitHub keeps the issue closed when the PR merges (via `Fixes #N`). If the PR is rejected, manually reopen the issue; the next `reconcile` will pick it back up.
+- To backfill closure for issues whose PRs were opened before this auto-close behavior shipped:
+  ```bash
+  npx remediator close-issues
   ```
 
 ## Observability

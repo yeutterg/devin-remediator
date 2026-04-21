@@ -26,6 +26,7 @@ export interface SessionRecord {
   structuredOutput?: Record<string, unknown>;
   archivedAfterPr?: boolean;
   completionCommentPosted?: boolean;
+  issueClosed?: boolean;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;

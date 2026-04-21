@@ -17,8 +17,17 @@ set -euo pipefail
 INTERVAL="${INTERVAL:-60}"
 BRANCH="${BRANCH:-main}"
 LOOP_DISPATCH="${LOOP_DISPATCH:-1}"   # set to 0 to skip dispatch each tick
+LOOP_DEMO="${LOOP_DEMO:-0}"            # 1 = one-at-a-time pacing for live demos
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+
+# Demo mode: cap MAX_ACTIVE_SESSIONS=1 so dispatch only creates one session at a time.
+# A new session is only created once the previous has shipped its PR (released via the
+# auto-archive path). Useful for Loom recordings where you want to narrate one PR at a time.
+if [[ "$LOOP_DEMO" = "1" ]]; then
+  export MAX_ACTIVE_SESSIONS=1
+  echo "  LOOP_DEMO=1: MAX_ACTIVE_SESSIONS pinned to 1 for one-at-a-time pacing"
+fi
 
 while true; do
   echo "=== $(date -u +%FT%TZ) tick"

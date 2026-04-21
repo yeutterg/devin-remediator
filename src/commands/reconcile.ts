@@ -143,6 +143,30 @@ export async function reconcileOneSession(
     changed = true;
   }
 
+  // Auto-close the source issue once a PR exists for it. GitHub normally only closes on MERGE
+  // via the `Fixes #N` keyword; this opt-in path closes on PR OPEN instead, giving a filterable
+  // "backlog burning down" signal at demo speed. If the PR is later rejected, a human can reopen
+  // the issue manually; rejection is rare enough that this is the pragmatic default.
+  if (s.prUrl && !s.issueClosed) {
+    try {
+      await octokit.issues.createComment({
+        ...repo,
+        issue_number: s.issueNumber,
+        body: `Auto-closing: Devin opened a PR for this issue — ${s.prUrl}. Reopen this issue if the PR is rejected.`,
+      });
+      await octokit.issues.update({
+        ...repo,
+        issue_number: s.issueNumber,
+        state: "closed",
+        state_reason: "completed",
+      });
+      s.issueClosed = true;
+      changed = true;
+    } catch (err) {
+      console.warn(pc.yellow(`  auto-close failed for #${s.issueNumber}: ${(err as Error).message}`));
+    }
+  }
+
   // #1 Concurrent-cap handling — once a session has a PR AND CI has at least reached a
   // non-pending state, archive it to release the concurrent-session slot. The PR keeps running
   // CI on its own; the human reviewer merges. If CI fails BEFORE archive, we auto-message the
