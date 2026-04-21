@@ -13,6 +13,7 @@ Event-driven remediation orchestrator. Turns GitHub issues (from scanners, seede
 7. **doctor** — one-shot preflight: verifies GitHub access, enables issues on the fork, creates the class labels, and probes whether `create_as_user_id` works. Results are cached in `state.json.preflight` so dispatch doesn't re-probe on every tick.
 8. **playbooks:register** — uploads each `src/playbooks/*.md` to Devin as an org-level playbook and caches the returned `playbook_id` in `state.json.playbooks[]`. On the next dispatch, sessions are created with `playbook_id` instead of ~2KB of inlined markdown per prompt.
 9. **webhook** — minimal Express-less receiver on `:8787/webhook`. Verifies a shared secret, parses session events, and stamps `state.json` so the next reconcile tick picks up the update without polling.
+10. **issues:ingest** — pulls existing open GitHub issues (default filter: `devin-auto-remediate` label) into `state.json` so `dispatch` can remediate **pre-existing issues** without the orchestrator filing any new ones. Useful when the issue source is humans, Linear/Jira webhooks, Dependabot/Snyk, or any upstream ticketing system.
 
 ## Why Devin
 
@@ -42,8 +43,17 @@ export REMEDIATOR_REPO=yeutterg/devin-remediator
 npx remediator doctor                          # preflight: labels, issues, impersonation probe
 npx remediator playbooks:register              # register playbooks → cache playbook_id in state.json
 
-# steady state
+# steady state — full pipeline (scanners file new issues, Devin remediates)
 npx remediator run                             # scan → file-issues → dispatch → reconcile → report
+
+# OR — resolve-only mode (remediate issues filed elsewhere; no scanner/seed work)
+npx remediator issues:ingest                   # pulls existing `devin-auto-remediate` issues into state
+npx remediator dispatch                        # creates Devin sessions for the ingested issues
+npx remediator reconcile                       # polls, auto-archives on CI-green, writes STATUS.md
+
+# OR — one-shot a single issue on demand
+npx remediator issues:ingest --issue 42 --class fe:a11y
+npx remediator dispatch
 ```
 
 Config load fails fast if `DEVIN_ORG_ID` / `DEVIN_USER_ID` / `DEVIN_API_KEY` don't match their expected prefixes — previously these were accepted as display names and only surfaced as a 404 on the first API call.
@@ -51,7 +61,8 @@ Config load fails fast if `DEVIN_ORG_ID` / `DEVIN_USER_ID` / `DEVIN_API_KEY` don
 ## Event sources
 
 - **Scheduled trigger** — `cron`, `launchd`, or a GitHub Action on `schedule:` runs `remediator run`. Scan findings are the event.
-- **Label trigger** — a human (or another system) labels an issue `devin-auto-remediate`; the next `dispatch` picks it up.
+- **Label trigger** — a human (or another system) labels an issue `devin-auto-remediate`; the next `issues:ingest` + `dispatch` pair picks it up. Use this when the orchestrator should **only remediate, not file**.
+- **Upstream ticketing trigger** — Linear/Jira/Snyk/Dependabot file issues on the repo (carrying the `devin-auto-remediate` label + a class label like `vuln:dep`); `issues:ingest` pulls them into state.
 - **CI-feedback trigger** — when a Devin PR's CI fails, the reconciler sends a follow-up message to the Devin session to self-correct.
 
 ## Observability
