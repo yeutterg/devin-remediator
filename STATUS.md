@@ -1,6 +1,6 @@
 # devin-remediator — STATUS
 
-_Regenerated: 2026-04-21T16:07:46.938Z_
+_Regenerated: 2026-04-21T16:08:54.791Z_
 
 ## How to tell this is working
 
@@ -29,7 +29,7 @@ We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked o
 
 - Median time-to-PR: **14m**
 - CI pass on first try: **2/12**
-- Average iterations per session: **0.48**
+- Average iterations per session: **0.52**
 
 ## Cost (ACUs)
 
@@ -41,9 +41,9 @@ We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked o
 
 | Class | Issue | Session | Status | PR | ACUs | Confidence |
 |---|---|---|---|---|---:|---|
-| `fe:perf` | [#23](https://github.com/yeutterg/superset/issues/23) | [702f68f3](https://app.devin.ai/sessions/0181418fef5047189c5806ff702f68f3) | `blocked` | — | 0.00 | high |
+| `fe:perf` | [#23](https://github.com/yeutterg/superset/issues/23) | [702f68f3](https://app.devin.ai/sessions/0181418fef5047189c5806ff702f68f3) | `running` | — | 0.00 | high |
 | `tests` | [#29](https://github.com/yeutterg/superset/issues/29) | [8ca38dcb](https://app.devin.ai/sessions/5212f89fada34eba823eec368ca38dcb) | `completed` | [PR](https://github.com/yeutterg/superset/pull/41) | 0.00 | high |
-| `fe:a11y` | [#19](https://github.com/yeutterg/superset/issues/19) | [e45f1990](https://app.devin.ai/sessions/639b0122a420490cbd6495e9e45f1990) | `blocked` | [PR](https://github.com/yeutterg/superset/pull/42) | 0.00 | high |
+| `fe:a11y` | [#19](https://github.com/yeutterg/superset/issues/19) | [e45f1990](https://app.devin.ai/sessions/639b0122a420490cbd6495e9e45f1990) | `running` | [PR](https://github.com/yeutterg/superset/pull/42) | 0.00 | high |
 | `fe:theme` | [#18](https://github.com/yeutterg/superset/issues/18) | [90dae73f](https://app.devin.ai/sessions/79c204e84caf41d9b35571fc90dae73f) | `stopped` | — | — | — |
 | `fe:theme` | [#17](https://github.com/yeutterg/superset/issues/17) | [93707435](https://app.devin.ai/sessions/a20786c0d2674fb3bc873e4c93707435) | `stopped` | — | — | — |
 | `fe:theme` | [#16](https://github.com/yeutterg/superset/issues/16) | [a34d9536](https://app.devin.ai/sessions/24c4d228c27c42cf8a8ea802a34d9536) | `stopped` | — | — | — |
