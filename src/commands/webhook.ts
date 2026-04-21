@@ -1,18 +1,31 @@
+import { spawn } from "node:child_process";
 import http from "node:http";
 import pc from "picocolors";
 import type { Config } from "../config.js";
+import { DevinClient } from "../devin.js";
+import { makeOctokit, parseRepo } from "../github.js";
 import { openState } from "../state.js";
+import { reconcileOneSession } from "./reconcile.js";
+import { runReport } from "./report.js";
 
-// Minimal webhook receiver stub. Today the reconciler polls every 3 minutes; a webhook would
-// turn that into push-based status updates. This handler verifies a shared-secret header, parses
-// the payload, and writes an entry to state.json — wiring it up to re-run `reconcile` for the
-// affected session is a follow-up (not landed yet, deliberately kept out of scope).
+// Webhook receiver: turns a Devin session event into an immediate state update + STATUS.md push,
+// so observability latency is O(ms) instead of O(poll-interval). The polling loop remains as a
+// fallback when the webhook is unreachable (e.g. ngrok tunnel dropped).
 //
-// Expected payload shape (subject to Devin API stabilization):
-//   { event: "session.status_changed" | "session.pr_opened" | "session.completed",
-//     session_id: "devin-…", status: "…", pr_url?: "…", acus_consumed?: number }
+// Expected payload (Devin v3 webhooks; field names are best-effort pending API stabilization):
+//   {
+//     event: "session.status_changed" | "session.pr_opened" | "session.completed" | ...,
+//     session_id: "devin-abcd1234" | "abcd1234",   // with or without the `devin-` prefix
+//     status?: "running" | "blocked" | "completed" | "stopped" | "failed",
+//     pr_url?: "https://github.com/…/pull/42",
+//     acus_consumed?: number,
+//   }
 //
-// Set WEBHOOK_SECRET in .env and configure Devin to POST here (e.g. via ngrok + the Devin UI).
+// Configure Devin with:
+//   export WEBHOOK_PUBLIC_URL=https://<tunnel>/webhook
+//   POST  https://api.devin.ai/v3/organizations/{org}/webhooks  { url, events: ["session.*"], secret }
+// Set WEBHOOK_SECRET in .env; the receiver rejects requests whose x-devin-signature /
+// x-webhook-secret header doesn't match.
 
 type WebhookEvent = {
   event?: string;
@@ -22,11 +35,53 @@ type WebhookEvent = {
   acus_consumed?: number;
 };
 
-export async function runWebhook(config: Config, opts: { port: number; secret?: string }): Promise<void> {
+function matchSession(
+  sessions: ReadonlyArray<{ devinSessionId: string }>,
+  payloadId: string | undefined,
+): { devinSessionId: string } | undefined {
+  if (!payloadId) return undefined;
+  const normalized = payloadId.startsWith("devin-") ? payloadId : `devin-${payloadId}`;
+  return sessions.find(
+    (s) => s.devinSessionId === payloadId || s.devinSessionId === normalized,
+  );
+}
+
+/** Commit + push STATUS.md if it changed. Fires a detached git invocation so a slow push
+ *  doesn't block the HTTP response to Devin. */
+function pushStatusAsync(rootDir: string, branch: string): void {
+  const sh = [
+    `cd ${rootDir}`,
+    `if ! git diff --quiet STATUS.md 2>/dev/null; then`,
+    `  git add STATUS.md`,
+    `  git -c user.name='devin-remediator[bot]' -c user.email='devin-remediator@local' commit -m "status: webhook $(date -u +%FT%TZ)" >/dev/null 2>&1`,
+    `  git push origin ${branch} >/dev/null 2>&1 || true`,
+    `fi`,
+  ].join(" && ");
+  const child = spawn("bash", ["-c", sh], { stdio: "ignore", detached: true });
+  child.unref();
+}
+
+export async function runWebhook(
+  config: Config,
+  opts: { port: number; secret?: string; pushBranch?: string; reportOut?: string },
+): Promise<void> {
   const db = await openState(config.stateFile);
   const secret = opts.secret ?? process.env["WEBHOOK_SECRET"];
+  const pushBranch = opts.pushBranch ?? process.env["WEBHOOK_PUSH_BRANCH"] ?? "";
+  const reportOut = opts.reportOut ?? "STATUS.md";
+
+  const devin = config.devinApiKey && config.devinOrgId
+    ? new DevinClient(config.devinApiKey, config.devinOrgId, config.devinApiBase)
+    : undefined;
+  const octokit = makeOctokit(config.githubToken);
+  const repo = parseRepo(config.targetRepo);
 
   const server = http.createServer(async (req, res) => {
+    if (req.method === "GET" && (req.url === "/health" || req.url === "/")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, sessions: db.data.sessions.length }));
+      return;
+    }
     if (req.method !== "POST" || req.url !== "/webhook") {
       res.writeHead(404).end();
       return;
@@ -47,25 +102,56 @@ export async function runWebhook(config: Config, opts: { port: number; secret?: 
       res.writeHead(400).end("invalid json");
       return;
     }
-    console.log(pc.cyan(`[webhook] ${payload.event ?? "?"} ${payload.session_id ?? "?"} → ${payload.status ?? "?"}`));
 
-    // Persist into state so the next reconcile tick picks it up. This keeps the webhook a thin
-    // observer; the source of truth remains the Devin GET endpoint.
-    const match = db.data.sessions.find(
-      (s) => s.devinSessionId === payload.session_id || s.devinSessionId === `devin-${payload.session_id}`,
+    // Respond fast; do the expensive work asynchronously so webhook delivery doesn't time out
+    // on slow Devin GETs or git pushes.
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true }));
+
+    console.log(
+      pc.cyan(
+        `[webhook] ${payload.event ?? "?"} ${payload.session_id ?? "?"} → ${payload.status ?? "?"}`,
+      ),
     );
-    if (match) {
-      match.updatedAt = new Date().toISOString();
-      if (payload.pr_url) match.prUrl = payload.pr_url;
-      if (typeof payload.acus_consumed === "number") match.acusConsumed = payload.acus_consumed;
-      await db.write();
+
+    const match = matchSession(db.data.sessions, payload.session_id);
+    if (!match) {
+      console.warn(pc.yellow(`  no local session for ${payload.session_id}; ignoring`));
+      return;
+    }
+    const session = db.data.sessions.find((s) => s.devinSessionId === match.devinSessionId);
+    if (!session) return;
+
+    // Optimistic in-memory update from the payload so STATUS.md reflects the event even if the
+    // Devin GET slow-paths below or fails.
+    if (payload.pr_url) session.prUrl = payload.pr_url;
+    if (typeof payload.acus_consumed === "number") session.acusConsumed = payload.acus_consumed;
+    session.updatedAt = new Date().toISOString();
+
+    // Authoritative update: refetch from Devin + run the per-session reconcile pipeline
+    // (CI check, auto-archive, completion comment, blocked-nudge).
+    if (devin) {
+      try {
+        await reconcileOneSession(session, { devin, octokit, repo });
+      } catch (err) {
+        console.warn(pc.yellow(`  reconcileOneSession failed: ${(err as Error).message}`));
+      }
+    }
+    await db.write();
+
+    try {
+      await runReport(config, db, reportOut);
+    } catch (err) {
+      console.warn(pc.yellow(`  runReport failed: ${(err as Error).message}`));
     }
 
-    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true }));
+    if (pushBranch) pushStatusAsync(process.cwd(), pushBranch);
   });
 
   await new Promise<void>((resolve) => server.listen(opts.port, resolve));
   console.log(
-    pc.green(`webhook listening on :${opts.port}/webhook${secret ? " (secret required)" : " (no secret set)"}`),
+    pc.green(
+      `webhook listening on :${opts.port}/webhook${secret ? " (secret required)" : " (no secret — DEV ONLY)"}`,
+    ),
   );
+  if (pushBranch) console.log(pc.gray(`  STATUS.md pushes → origin/${pushBranch}`));
 }
