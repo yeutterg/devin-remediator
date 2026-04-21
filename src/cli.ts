@@ -14,6 +14,7 @@ import { runDoctor } from "./commands/doctor.js";
 import { runRegisterPlaybooks } from "./commands/playbooks.js";
 import { runWebhook } from "./commands/webhook.js";
 import { runIngest } from "./commands/ingest.js";
+import { runCloseIssues } from "./commands/closeIssues.js";
 import type { FindingClass } from "./scanners/normalize.js";
 
 const VALID_CLASSES: readonly FindingClass[] = [
@@ -89,15 +90,30 @@ async function main(): Promise<void> {
 
   program
     .command("webhook")
-    .description("Start a minimal Devin webhook receiver (stub — writes to state.json)")
+    .description("Start the Devin webhook receiver (real-time: reconciles + pushes STATUS.md on each event)")
     .option("-p, --port <n>", "Port to listen on", "8787")
     .option("-s, --secret <secret>", "Shared secret (overrides WEBHOOK_SECRET env)")
-    .action(async (opts: { port: string; secret?: string }) => {
+    .option("-b, --push-branch <name>", "Auto-commit + push STATUS.md to this branch on each event")
+    .option("-o, --out <path>", "Report output path", "STATUS.md")
+    .action(async (opts: { port: string; secret?: string; pushBranch?: string; out: string }) => {
       const config = loadConfig();
       await runWebhook(config, {
         port: Number(opts.port),
+        reportOut: opts.out,
         ...(opts.secret ? { secret: opts.secret } : {}),
+        ...(opts.pushBranch ? { pushBranch: opts.pushBranch } : {}),
       });
+    });
+
+  program
+    .command("close-issues")
+    .description(
+      "Close every GitHub issue whose session already has a PR URL in state.json. Idempotent; used once to backfill issues opened before auto-close shipped.",
+    )
+    .action(async () => {
+      const config = loadConfig();
+      const db = await openState(config.stateFile);
+      await runCloseIssues(config, db);
     });
 
   program

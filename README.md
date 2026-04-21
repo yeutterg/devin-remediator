@@ -12,7 +12,7 @@ Event-driven remediation orchestrator. Turns GitHub issues (from scanners, seede
 6. **run** — scan → file-issues → dispatch → reconcile → report, in one execution.
 7. **doctor** — one-shot preflight: verifies GitHub access, enables issues on the fork, creates the class labels, and probes whether `create_as_user_id` works. Results are cached in `state.json.preflight` so dispatch doesn't re-probe on every tick.
 8. **playbooks:register** — uploads each `src/playbooks/*.md` to Devin as an org-level playbook and caches the returned `playbook_id` in `state.json.playbooks[]`. On the next dispatch, sessions are created with `playbook_id` instead of ~2KB of inlined markdown per prompt.
-9. **webhook** — minimal Express-less receiver on `:8787/webhook`. Verifies a shared secret, parses session events, and stamps `state.json` so the next reconcile tick picks up the update without polling.
+9. **webhook** — real-time receiver on `:8787/webhook`. Verifies a shared secret, and on each Devin session event: refetches the session, runs the per-session reconcile pipeline (CI check, auto-archive on CI-green, completion comment), regenerates `STATUS.md`, and (optionally) commits + pushes to a configured branch. The polling loop remains as a fallback.
 10. **issues:ingest** — pulls existing open GitHub issues (default filter: `devin-auto-remediate` label) into `state.json` so `dispatch` can remediate **pre-existing issues** without the orchestrator filing any new ones. Useful when the issue source is humans, Linear/Jira webhooks, Dependabot/Snyk, or any upstream ticketing system.
 
 ## Why Devin
@@ -65,9 +65,42 @@ Config load fails fast if `DEVIN_ORG_ID` / `DEVIN_USER_ID` / `DEVIN_API_KEY` don
 - **Upstream ticketing trigger** — Linear/Jira/Snyk/Dependabot file issues on the repo (carrying the `devin-auto-remediate` label + a class label like `vuln:dep`); `issues:ingest` pulls them into state.
 - **CI-feedback trigger** — when a Devin PR's CI fails, the reconciler sends a follow-up message to the Devin session to self-correct.
 
+## Real-time updates
+
+Two paths, designed to coexist:
+
+- **Webhook (push)** — lowest latency. Devin POSTs session events to `:8787/webhook`; the receiver updates state + STATUS.md in one round-trip.
+  ```bash
+  # terminal 1: start receiver, auto-push STATUS.md to main on every event
+  export WEBHOOK_SECRET=$(openssl rand -hex 32)
+  npx remediator webhook --push-branch main
+
+  # terminal 2 (or the Devin UI): expose the receiver + register it
+  ngrok http 8787              # or cloudflared, tailscale funnel, etc.
+  # Then register the public URL + secret with Devin (UI → Settings → Webhooks,
+  # or POST /v3/organizations/{org}/webhooks with events: ["session.*"]).
+  ```
+- **Polling loop (pull)** — always-on fallback. Default interval 60s; runs `dispatch → reconcile → report` per tick.
+  ```bash
+  BRANCH=main INTERVAL=60 bash scripts/loop.sh
+
+  # Live-demo pacing: one session at a time (a new one only starts after the previous
+  # session's PR ships and the concurrent slot is released). Useful for Loom recordings.
+  LOOP_DEMO=1 BRANCH=main INTERVAL=60 bash scripts/loop.sh
+  ```
+
+## Issue lifecycle
+
+- When a Devin session **opens a PR** for an issue, the reconciler immediately **closes the issue** with a comment linking the PR. This keeps the `Open` issue list as the live work-queue.
+- The PR itself is **never auto-merged** — a human reviewer is the trust gate. GitHub keeps the issue closed when the PR merges (via `Fixes #N`). If the PR is rejected, manually reopen the issue; the next `reconcile` will pick it back up.
+- To backfill closure for issues whose PRs were opened before this auto-close behavior shipped:
+  ```bash
+  npx remediator close-issues
+  ```
+
 ## Observability
 
-`STATUS.md` is regenerated on every `report` run. It tracks end-to-end effectiveness with:
+`STATUS.md` is regenerated on every `report` run (polling) and on every webhook event (push). It tracks end-to-end effectiveness with:
 
 - Funnel (findings → issues → sessions → PRs → merged) by class.
 - Throughput (sessions completed per hour).
@@ -103,7 +136,7 @@ src/
     run.ts
     doctor.ts            # preflight checks + cache
     playbooks.ts         # register/update org playbooks
-    webhook.ts           # minimal receiver stub
+    webhook.ts           # real-time receiver: per-session reconcile + STATUS.md push
   playbooks/
     security.md
     ci.md
