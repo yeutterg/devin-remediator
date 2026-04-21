@@ -1,16 +1,16 @@
 # devin-remediator — STATUS
 
-_Regenerated: 2026-04-21T16:35:23.558Z_
+_Regenerated: 2026-04-21T16:36:30.054Z_
 
 ## How to tell this is working
 
-We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked off **21** Devin sessions. **12** PRs have been opened; **11** sessions are complete. Median time from session start to PR is **14m** and **2/12** PRs passed CI on the first try. Backlog: **9** unaddressed issues.
+We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked off **21** Devin sessions. **12** PRs have been opened; **12** sessions are complete. Median time from session start to PR is **14m** and **2/12** PRs passed CI on the first try. Backlog: **9** unaddressed issues.
 
 ## Live counts
 
 | Runs | Findings | Issues | Active | Completed | Stopped | PRs opened |
 |---|---|---|---|---|---|---|
-| 0 | 30 | 30 | 2 | 11 | 8 | 12 |
+| 0 | 30 | 30 | 1 | 12 | 8 | 12 |
 
 ## Funnel by class
 
@@ -43,7 +43,7 @@ We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked o
 |---|---|---|---|---|---:|---|
 | `fe:perf` | [#23](https://github.com/yeutterg/superset/issues/23) | [702f68f3](https://app.devin.ai/sessions/0181418fef5047189c5806ff702f68f3) | `running` | — | 0.00 | high |
 | `tests` | [#29](https://github.com/yeutterg/superset/issues/29) | [8ca38dcb](https://app.devin.ai/sessions/5212f89fada34eba823eec368ca38dcb) | `completed` | [PR](https://github.com/yeutterg/superset/pull/41) | 0.00 | high |
-| `fe:a11y` | [#19](https://github.com/yeutterg/superset/issues/19) | [e45f1990](https://app.devin.ai/sessions/639b0122a420490cbd6495e9e45f1990) | `running` | [PR](https://github.com/yeutterg/superset/pull/42) | 0.00 | high |
+| `fe:a11y` | [#19](https://github.com/yeutterg/superset/issues/19) | [e45f1990](https://app.devin.ai/sessions/639b0122a420490cbd6495e9e45f1990) | `completed` | [PR](https://github.com/yeutterg/superset/pull/42) | 0.00 | high |
 | `fe:theme` | [#18](https://github.com/yeutterg/superset/issues/18) | [90dae73f](https://app.devin.ai/sessions/79c204e84caf41d9b35571fc90dae73f) | `stopped` | — | — | — |
 | `fe:theme` | [#17](https://github.com/yeutterg/superset/issues/17) | [93707435](https://app.devin.ai/sessions/a20786c0d2674fb3bc873e4c93707435) | `stopped` | — | — | — |
 | `fe:theme` | [#16](https://github.com/yeutterg/superset/issues/16) | [a34d9536](https://app.devin.ai/sessions/24c4d228c27c42cf8a8ea802a34d9536) | `stopped` | — | — | — |
