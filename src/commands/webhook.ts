@@ -92,8 +92,14 @@ export async function runWebhook(
   // they can't race on `.git/index.lock`.
   let chain: Promise<void> = Promise.resolve();
   function serialize(fn: () => Promise<void>): Promise<void> {
-    chain = chain.catch(() => {}).then(fn);
-    return chain;
+    // Each task runs after the previous one settles; catch at both ends so neither a failing
+    // predecessor blocks the chain nor a failing task surfaces as an unhandled rejection when
+    // callers `void serialize(...)`.
+    const next = chain.then(() => fn().catch((err: unknown) => {
+      console.warn(pc.yellow(`  serialized task failed: ${(err as Error).message}`));
+    }));
+    chain = next;
+    return next;
   }
 
   const server = http.createServer(async (req, res) => {
@@ -166,7 +172,11 @@ export async function runWebhook(
           console.warn(pc.yellow(`  reconcileOneSession failed: ${(err as Error).message}`));
         }
       }
-      await db.write();
+      try {
+        await db.write();
+      } catch (err) {
+        console.warn(pc.yellow(`  db.write failed: ${(err as Error).message}`));
+      }
 
       try {
         await runReport(config, db, reportOut);
