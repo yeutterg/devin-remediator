@@ -13,6 +13,19 @@ import { runAll } from "./commands/run.js";
 import { runDoctor } from "./commands/doctor.js";
 import { runRegisterPlaybooks } from "./commands/playbooks.js";
 import { runWebhook } from "./commands/webhook.js";
+import { runIngest } from "./commands/ingest.js";
+import type { FindingClass } from "./scanners/normalize.js";
+
+const VALID_CLASSES: readonly FindingClass[] = [
+  "vuln:dep",
+  "vuln:ci",
+  "vuln:static",
+  "fe:theme",
+  "fe:a11y",
+  "fe:perf",
+  "ts:migrate",
+  "tests",
+] as const;
 
 async function main(): Promise<void> {
   const program = new Command();
@@ -84,6 +97,31 @@ async function main(): Promise<void> {
       await runWebhook(config, {
         port: Number(opts.port),
         ...(opts.secret ? { secret: opts.secret } : {}),
+      });
+    });
+
+  program
+    .command("issues:ingest")
+    .description(
+      "Ingest existing GitHub issues (labeled `devin-auto-remediate` by default) into state.json so `dispatch` can remediate them without filing new issues",
+    )
+    .option("-l, --label <name>", "Filter label (default: config.autoRemediateLabel)")
+    .option("-c, --class <cls>", "Fallback class to assign when no class label is present")
+    .option("-i, --issue <n>", "Ingest only this single issue number")
+    .action(async (opts: { label?: string; class?: string; issue?: string }) => {
+      const config = loadConfig();
+      const db = await openState(config.stateFile);
+      let cls: FindingClass | undefined;
+      if (opts.class) {
+        if (!(VALID_CLASSES as readonly string[]).includes(opts.class)) {
+          throw new Error(`--class must be one of: ${VALID_CLASSES.join(", ")}`);
+        }
+        cls = opts.class as FindingClass;
+      }
+      await runIngest(config, db, {
+        ...(opts.label ? { labelFilter: opts.label } : {}),
+        ...(cls ? { class: cls } : {}),
+        ...(opts.issue ? { issue: Number(opts.issue) } : {}),
       });
     });
 
