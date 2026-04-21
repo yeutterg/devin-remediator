@@ -46,19 +46,26 @@ function matchSession(
   );
 }
 
-/** Awaitable git add/commit/push of STATUS.md. Resolves whether or not there was anything to
- *  push; errors are swallowed (the next event / loop tick will retry). Callers serialize via
- *  the pushQueue to avoid `.git/index.lock` races between concurrent webhook events. */
-function pushStatus(rootDir: string, branch: string): Promise<void> {
+/** Awaitable git add/commit/push of the report file (defaults to STATUS.md). Resolves whether
+ *  or not there was anything to push; errors are swallowed (the next event / loop tick will
+ *  retry). Callers serialize via the pushQueue to avoid `.git/index.lock` races between
+ *  concurrent webhook events. */
+function pushStatus(rootDir: string, branch: string, reportFile: string): Promise<void> {
+  // Single-quote paths & branch for the bash script; escape any embedded single quotes using
+  // the standard `'"'"'` sandwich so a path like `weird'name.md` still parses correctly.
+  const q = (s: string): string => `'${s.replace(/'/g, `'"'"'`)}'`;
+  const qFile = q(reportFile);
+  const qBranch = q(branch);
+  const qRoot = q(rootDir);
   // Multi-line bash script: join with `\n` so each array element is its own line (space-join
   // merged `cd` and `if` into one command; && join broke on `then &&`). Inner `&&` chains the
   // three git commands so a failed add/commit doesn't push stale state.
   const sh = [
-    `cd "${rootDir}"`,
-    `if ! git diff --quiet STATUS.md 2>/dev/null; then`,
-    `  git add STATUS.md &&`,
+    `cd ${qRoot}`,
+    `if ! git diff --quiet -- ${qFile} 2>/dev/null; then`,
+    `  git add -- ${qFile} &&`,
     `  git -c user.name='devin-remediator[bot]' -c user.email='devin-remediator@local' commit -m "status: webhook $(date -u +%FT%TZ)" >/dev/null 2>&1 &&`,
-    `  git push origin "${branch}" >/dev/null 2>&1 || true`,
+    `  git push origin ${qBranch} >/dev/null 2>&1 || true`,
     `fi`,
   ].join("\n");
   return new Promise<void>((resolve) => {
@@ -184,7 +191,7 @@ export async function runWebhook(
         console.warn(pc.yellow(`  runReport failed: ${(err as Error).message}`));
       }
 
-      if (pushBranch) await pushStatus(process.cwd(), pushBranch);
+      if (pushBranch) await pushStatus(process.cwd(), pushBranch, reportOut);
     });
   });
 
