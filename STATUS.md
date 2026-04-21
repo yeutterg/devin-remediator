@@ -1,6 +1,6 @@
 # devin-remediator — STATUS
 
-_Regenerated: 2026-04-21T16:41:51.960Z_
+_Regenerated: 2026-04-21T16:42:56.563Z_
 
 ## How to tell this is working
 
@@ -41,7 +41,7 @@ We surfaced **30** remediation targets, filed **30** GitHub issues, and kicked o
 
 | Class | Issue | Session | Status | PR | ACUs | Confidence |
 |---|---|---|---|---|---:|---|
-| `fe:perf` | [#23](https://github.com/yeutterg/superset/issues/23) | [702f68f3](https://app.devin.ai/sessions/0181418fef5047189c5806ff702f68f3) | `running` | — | 0.00 | high |
+| `fe:perf` | [#23](https://github.com/yeutterg/superset/issues/23) | [702f68f3](https://app.devin.ai/sessions/0181418fef5047189c5806ff702f68f3) | `blocked` | — | 0.00 | low |
 | `tests` | [#29](https://github.com/yeutterg/superset/issues/29) | [8ca38dcb](https://app.devin.ai/sessions/5212f89fada34eba823eec368ca38dcb) | `completed` | [PR](https://github.com/yeutterg/superset/pull/41) | 0.00 | high |
 | `fe:a11y` | [#19](https://github.com/yeutterg/superset/issues/19) | [e45f1990](https://app.devin.ai/sessions/639b0122a420490cbd6495e9e45f1990) | `completed` | [PR](https://github.com/yeutterg/superset/pull/42) | 0.00 | high |
 | `fe:theme` | [#18](https://github.com/yeutterg/superset/issues/18) | [90dae73f](https://app.devin.ai/sessions/79c204e84caf41d9b35571fc90dae73f) | `stopped` | — | — | — |
